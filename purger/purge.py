@@ -32,6 +32,8 @@ def files():
     out = []
     for root, _, names in os.walk(DATA):
         for n in names:
+            if n.startswith("."):  # never purge hidden files, e.g. the repo's downloads/.gitkeep
+                continue
             p = Path(root) / n
             try:
                 st = p.stat()

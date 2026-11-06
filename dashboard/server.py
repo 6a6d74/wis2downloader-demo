@@ -63,6 +63,8 @@ def scan():
     by_ext = {}
     for root, _, names in os.walk(DATA):
         for name in names:
+            if name.startswith("."):  # hidden files (downloads/.gitkeep) aren't downloads
+                continue
             p = Path(root) / name
             try:
                 st = p.stat()
