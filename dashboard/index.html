@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WIS2 Downloader demo</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-0: #f3f2ee;
+    --surface-1: #fcfcfb;
+    --border: #e1e0db;
+    --grid: #e6e5e1;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #6f6e69;
+    --series-1: #2a78d6;
+    --link: #1d62b5;
+    --good: #008300;
+    --warn: #b36b00;
+    --code-bg: #f0efeb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-0: #121211;
+      --surface-1: #1a1a19;
+      --border: #33332f;
+      --grid: #2b2b28;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #9a998f;
+      --series-1: #3987e5;
+      --link: #7fb2f0;
+      --good: #3fb950;
+      --warn: #e3a33a;
+      --code-bg: #232321;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface-0); color: var(--text-primary);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 20px 28px 8px; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 650; }
+  header p { margin: 4px 0 0; color: var(--text-secondary); }
+  main { padding: 12px 28px 32px; display: grid; gap: 16px;
+         grid-template-columns: repeat(12, 1fr); max-width: 1400px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+          padding: 16px 18px; min-width: 0; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; letter-spacing: .02em;
+             text-transform: uppercase; color: var(--text-secondary); }
+  .tile { grid-column: span 3; }
+  .tile .value { font-size: 34px; font-weight: 650; line-height: 1.1;
+                 font-variant-numeric: tabular-nums; }
+  .tile .sub { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+  .wide { grid-column: span 12; }
+  .half { grid-column: span 6; }
+  @media (max-width: 1000px) { .tile { grid-column: span 6; } .half { grid-column: span 12; } }
+  code, pre { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  pre { background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 0;
+        overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  th { color: var(--text-secondary); font-weight: 600; font-size: 12.5px; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.path { word-break: break-all; }
+  a { color: var(--link); }
+  .muted { color: var(--text-muted); }
+  .status { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+  .status svg { width: 14px; height: 14px; }
+  .ok { color: var(--good); } .bad { color: var(--warn); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+  .kv dt { color: var(--text-secondary); } .kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .topic { font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, monospace; word-break: break-all; }
+  #chart { position: relative; }
+  #chart svg { display: block; width: 100%; height: 280px; }
+  #chart .axis text { fill: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  #chart .grid line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+  #tip { position: absolute; pointer-events: none; background: var(--surface-1);
+         border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;
+         box-shadow: 0 4px 14px rgba(0,0,0,.12); font-size: 12.5px; display: none; white-space: nowrap; }
+  #tip strong { display: block; font-size: 14px; font-variant-numeric: tabular-nums; }
+  #tip .key { display: inline-block; width: 12px; height: 2px; background: var(--series-1);
+              vertical-align: middle; margin-right: 6px; }
+  details summary { cursor: pointer; color: var(--text-secondary); margin-top: 8px; }
+  .links a { margin-right: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WIS2 Downloader demo</h1>
+  <p>ECMWF deterministic medium-range forecasts (GRIB2), received through Météo-France's WIS2 Global Broker.</p>
+  <p class="links"><a href="/files/">Browse the downloaded files</a>
+     <a href="http://localhost:5050/swagger" target="_blank">wis2downloader API (Swagger)</a></p>
+</header>
+<main>
+  <section class="card tile"><h2>Files on disk</h2>
+    <div class="value" id="t-files">–</div><div class="sub" id="t-files-sub"></div></section>
+  <section class="card tile"><h2>Size on disk</h2>
+    <div class="value" id="t-bytes">–</div><div class="sub" id="t-bytes-sub"></div></section>
+  <section class="card tile"><h2>Newest file</h2>
+    <div class="value" id="t-newest">–</div><div class="sub" id="t-newest-sub"></div></section>
+  <section class="card tile"><h2>Purge</h2>
+    <div class="value" id="t-ret">–</div><div class="sub" id="t-ret-sub"></div></section>
+
+  <section class="card wide">
+    <h2>Downloaded data on disk</h2>
+    <div id="chart"><svg id="svg" role="img" aria-label="Size of downloaded data over time"></svg><div id="tip"></div></div>
+    <p class="muted" id="chart-note"></p>
+    <details><summary>Show as table</summary><table id="hist-table"></table></details>
+  </section>
+
+  <section class="card half">
+    <h2>Subscriptions</h2>
+    <div id="subs"></div>
+  </section>
+
+  <section class="card half">
+    <h2>Configuration</h2>
+    <dl class="kv" id="cfg"></dl>
+    <details><summary>downloader/config.json</summary><pre id="cfg-raw"></pre></details>
+  </section>
+
+  <section class="card wide">
+    <h2>Most recent files</h2>
+    <table><thead><tr><th>File</th><th class="n">Size</th><th class="n">Received (UTC)</th></tr></thead>
+      <tbody id="latest"></tbody></table>
+  </section>
+</main>
+
+<script>
+const TOPIC = "cache/a/wis2/int-ecmwf/data/core/weather/prediction/forecast/medium-range/deterministic/global";
+const $ = id => document.getElementById(id);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+
+function human(n) {
+  const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+  return i === 0 ? `${n} B` : `${n.toFixed(n < 10 ? 2 : 1)} ${u[i]}`;
+}
+function ago(isoStr, nowIso) {
+  if (!isoStr) return "–";
+  const s = (Date.parse(nowIso) - Date.parse(isoStr)) / 1000;
+  if (s < 90) return `${Math.max(0, Math.round(s))} s ago`;
+  if (s < 5400) return `${Math.round(s / 60)} min ago`;
+  return `${(s / 3600).toFixed(1)} h ago`;
+}
+const fmtTime = t => t.replace("T", " ").replace("Z", "");
+const icon = ok => {
+  const ns = "http://www.w3.org/2000/svg", s = document.createElementNS(ns, "svg");
+  s.setAttribute("viewBox", "0 0 16 16"); s.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS(ns, "path");
+  p.setAttribute("d", ok ? "M3 8.5l3 3 7-7" : "M8 3v6M8 12v1");
+  p.setAttribute("fill", "none"); p.setAttribute("stroke", "currentColor");
+  p.setAttribute("stroke-width", "2"); p.setAttribute("stroke-linecap", "round");
+  s.appendChild(p); return s;
+};
+
+// ---------- chart: single-series area of bytes on disk over time ----------
+let HIST = [];
+function niceStep(max, ticks) {
+  const raw = max / ticks, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+function drawChart() {
+  const svg = $("svg"), ns = "http://www.w3.org/2000/svg";
+  svg.replaceChildren();
+  const W = svg.clientWidth || 800, H = 280, m = { l: 64, r: 16, t: 12, b: 28 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const mk = (tag, attrs, parent = svg) => { const e = document.createElementNS(ns, tag);
+    for (const k in attrs) {  // CSS variables go through style, not presentation attributes
+      const v = String(attrs[k]);
+      if (v.startsWith("var(")) e.style.setProperty(k, v); else e.setAttribute(k, v);
+    }
+    parent.appendChild(e); return e; };
+  if (HIST.length < 2) {
+    mk("text", { x: W / 2, y: H / 2, "text-anchor": "middle", fill: "var(--text-muted)" })
+      .textContent = "Collecting samples (one a minute)…";
+    return;
+  }
+  const xs = HIST.map(h => Date.parse(h.t)), ys = HIST.map(h => h.bytes);
+  const x0 = xs[0], x1 = xs[xs.length - 1];
+  const step = niceStep(Math.max(...ys, 1), 4), yMax = Math.ceil(Math.max(...ys, 1) / step) * step;
+  const X = t => m.l + (t - x0) / Math.max(1, x1 - x0) * (W - m.l - m.r);
+  const Y = v => H - m.b - v / yMax * (H - m.t - m.b);
+  const grid = mk("g", { class: "grid" }), axis = mk("g", { class: "axis" });
+  for (let v = 0; v <= yMax + 1e-9; v += step) {
+    mk("line", { x1: m.l, x2: W - m.r, y1: Y(v), y2: Y(v) }, grid);
+    mk("text", { x: m.l - 8, y: Y(v) + 4, "text-anchor": "end" }, axis).textContent = human(v);
+  }
+  const span = x1 - x0, nT = Math.max(2, Math.floor((W - m.l - m.r) / 120));
+  for (let i = 0; i <= nT; i++) {
+    const t = x0 + span * i / nT, d = new Date(t);
+    const lbl = span > 36e5 * 20
+      ? `${d.getUTCDate()}/${d.getUTCMonth() + 1} ${String(d.getUTCHours()).padStart(2, "0")}:00`
+      : `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+    mk("text", { x: X(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === nT ? "end" : "middle" }, axis).textContent = lbl;
+  }
+  const pts = HIST.map((h, i) => `${X(xs[i]).toFixed(1)},${Y(h.bytes).toFixed(1)}`);
+  mk("path", { d: `M${X(x0)},${Y(0)} L${pts.join(" L")} L${X(x1)},${Y(0)} Z`,
+               fill: "var(--series-1)", "fill-opacity": 0.1 });
+  mk("path", { d: `M${pts.join(" L")}`, fill: "none", stroke: "var(--series-1)",
+               "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" });
+  // crosshair + tooltip
+  const cross = mk("line", { y1: m.t, y2: H - m.b, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+  const dot = mk("circle", { r: 4.5, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" });
+  const hit = mk("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" });
+  const tip = $("tip");
+  hit.addEventListener("pointermove", ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * W / r.width;
+    let i = 0, best = Infinity;
+    xs.forEach((t, k) => { const d = Math.abs(X(t) - px); if (d < best) { best = d; i = k; } });
+    const cx = X(xs[i]), cy = Y(ys[i]);
+    cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", cx); dot.setAttribute("cy", cy); dot.setAttribute("visibility", "visible");
+    tip.replaceChildren(el("strong", human(ys[i])),
+      Object.assign(el("span"), { className: "key" }), el("span", `${HIST[i].files} files · ${fmtTime(HIST[i].t)} UTC`));
+    tip.style.display = "block";
+    const left = cx * r.width / W;
+    tip.style.left = `${Math.min(left + 12, r.width - tip.offsetWidth - 4)}px`;
+    tip.style.top = `${Math.max(0, cy * r.height / H - 52)}px`;
+  });
+  hit.addEventListener("pointerleave", () => {
+    cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.style.display = "none";
+  });
+}
+
+function renderHistTable() {
+  const t = $("hist-table"); t.replaceChildren();
+  const head = el("tr"); ["Time (UTC)", "Files", "Size"].forEach((h, i) => head.appendChild(el("th", h, i ? "n" : "")));
+  t.appendChild(head);
+  HIST.slice(-60).reverse().forEach(h => {
+    const tr = el("tr");
+    tr.append(el("td", fmtTime(h.t)), el("td", String(h.files), "n"), el("td", human(h.bytes), "n"));
+    t.appendChild(tr);
+  });
+}
+
+// ---------- data ----------
+async function getJSON(url) { const r = await fetch(url, { cache: "no-store" }); return r.json(); }
+
+async function refreshStatus() {
+  const s = await getJSON("/api/status");
+  const p = s.pile;
+  $("t-files").textContent = p.files.toLocaleString();
+  const ext = Object.entries(p.by_extension).map(([k, v]) => `${v.files} .${k}`).join(", ");
+  $("t-files-sub").textContent = ext || "nothing downloaded yet";
+  $("t-bytes").textContent = human(p.bytes);
+  $("t-bytes-sub").textContent = p.oldest ? `oldest file ${ago(p.oldest, s.now)}` : "";
+  $("t-newest").textContent = ago(p.newest, s.now);
+  $("t-newest-sub").textContent = p.newest ? `${fmtTime(p.newest)} UTC` : "waiting for ECMWF to publish";
+  if (s.purge) {
+    $("t-ret").textContent = `${s.purge.retention_hours} h`;
+    $("t-ret-sub").textContent = `last run ${ago(s.purge.last_run, s.now)}: removed ${s.purge.removed_files} file(s); ` +
+      `${s.purge.total_removed_files} in total (${human(s.purge.total_removed_bytes)})`;
+  }
+  HIST = s.history; drawChart(); renderHistTable();
+  $("chart-note").textContent = HIST.length
+    ? `One sample a minute since ${fmtTime(HIST[0].t)} UTC. The line drops when the purger removes files older than the retention period.`
+    : "";
+  const tb = $("latest"); tb.replaceChildren();
+  if (!p.latest.length) { const tr = el("tr"); const td = el("td", "No files yet.", "muted"); td.colSpan = 3; tr.appendChild(td); tb.appendChild(tr); }
+  p.latest.forEach(f => {
+    const tr = el("tr"), td = el("td", null, "path"), a = el("a", f.path);
+    a.href = "/files/" + f.path.split("/").map(encodeURIComponent).join("/");
+    td.appendChild(a); tr.append(td, el("td", human(f.bytes), "n"), el("td", fmtTime(f.time), "n"));
+    tb.appendChild(tr);
+  });
+}
+
+async function refreshSubs() {
+  const box = $("subs"); box.replaceChildren();
+  let subs;
+  try { subs = await getJSON("/api/subscriptions"); } catch (e) { subs = { error: String(e) }; }
+  if (subs.error) {
+    box.append(el("p", "", "status bad"));
+    box.lastChild.append(icon(false), el("span", "Downloader not reachable"));
+    box.append(el("p", subs.error, "muted"));
+    return;
+  }
+  const topics = Object.keys(subs);
+  const st = el("p", "", "status " + (topics.length ? "ok" : "bad"));
+  st.append(icon(topics.length > 0), el("span", topics.length ? `${topics.length} active subscription(s)` : "No subscriptions yet"));
+  box.append(st);
+  topics.forEach(t => {
+    const d = el("div"); d.style.marginBottom = "10px";
+    d.append(el("div", t, "topic"));
+    d.append(el("div", `saved under: ${subs[t].target === "$TOPIC" ? "<date>/<topic>/" : subs[t].target}`, "muted"));
+    box.append(d);
+  });
+  if (!topics.includes(TOPIC)) {
+    box.append(el("p", "To subscribe to ECMWF's forecasts, run:", "muted"));
+    box.append(el("pre", `docker compose exec downloader \\\n  wis2downloader add-subscription \\\n  --topic "${TOPIC}"`));
+  }
+}
+
+async function refreshConfig() {
+  const c = await getJSON("/api/config"), d = c.downloader || {}, kv = $("cfg");
+  kv.replaceChildren();
+  const rows = [
+    ["Global Broker", `${d.broker_hostname}:${d.broker_port} (${d.broker_protocol})`],
+    ["Login", d.broker_username],
+    ["Download workers", d.download_workers],
+    ["Download directory", `${d.download_dir}  →  ./downloads on this computer`],
+    ["Free-space floor", `${d.min_free_space} GB`],
+    ["Topic validation", d.validate_topics ? "on (WIS2 topic hierarchy)" : "off"],
+    ["Retention", `${c.purge.retention_hours} hours (purged every ${c.purge.interval_minutes} min)`],
+    ["Size cap", c.purge.max_download_gb > 0 ? `${c.purge.max_download_gb} GB (oldest files go first)` : "none"],
+  ];
+  rows.forEach(([k, v]) => kv.append(el("dt", k), el("dd", String(v))));
+  $("cfg-raw").textContent = JSON.stringify(d, null, 2);
+}
+
+async function tick() {
+  try { await refreshStatus(); } catch (e) { console.error(e); }
+  try { await refreshSubs(); } catch (e) { console.error(e); }
+}
+refreshConfig(); tick();
+setInterval(tick, 10000);
+window.addEventListener("resize", drawChart);
+</script>
+</body>
+</html>

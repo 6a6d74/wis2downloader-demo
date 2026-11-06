@@ -1,0 +1,62 @@
+name: wis2downloader-demo
+
+# All three containers run as the host user (HOST_UID/HOST_GID in .env), so files
+# in ./downloads and ./state belong to you, not root.
+x-user: &host-user "${HOST_UID:-1000}:${HOST_GID:-1000}"
+
+services:
+  # wis2downloader 0.3.2: subscribes to Météo-France's Global Broker and downloads
+  # each file announced on its subscribed topics into ./downloads/<date>/<topic>/.
+  # API and Swagger UI: http://localhost:5050/swagger
+  downloader:
+    build: ./downloader
+    user: *host-user
+    environment:
+      HOME: /tmp                # gunicorn keeps its control socket in $HOME
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5050:5000"   # host 5050: 5000 is often taken
+    volumes:
+      - ./downloader/config.json:/app/config.json:ro
+      - ./downloads:/data/downloads
+      - ./state:/data/state     # keeps subscriptions (mqtt_session.json) across restarts
+
+  # wis2downloader 0.3.2 never deletes anything: this removes files older than
+  # RETENTION_HOURS, plus the oldest files if the pile passes MAX_DOWNLOAD_GB.
+  purger:
+    image: python:3.12-alpine
+    restart: unless-stopped
+    command: ["python", "-u", "/app/purge.py"]
+    user: *host-user
+    environment:
+      RETENTION_HOURS: ${RETENTION_HOURS:-36}
+      MAX_DOWNLOAD_GB: ${MAX_DOWNLOAD_GB:-20}
+      PURGE_INTERVAL_MINUTES: ${PURGE_INTERVAL_MINUTES:-10}
+    volumes:
+      - ./purger/purge.py:/app/purge.py:ro
+      - ./downloads:/data/downloads
+      - ./state:/data/state
+
+  # Browser dashboard: configuration, subscriptions and the growing pile of files,
+  # and "Inspect & plot" for any GRIB file (grib-utils scripts in dashboard/grib_utils/).
+  # http://localhost:8088
+  dashboard:
+    build: ./dashboard          # adds earthkit, for "Inspect & plot" on the downloads page
+    restart: unless-stopped
+    command: ["python", "-u", "/app/server.py"]
+    user: *host-user
+    ports:
+      - "127.0.0.1:8088:8080"
+    environment:
+      RETENTION_HOURS: ${RETENTION_HOURS:-36}
+      MAX_DOWNLOAD_GB: ${MAX_DOWNLOAD_GB:-20}
+      PURGE_INTERVAL_MINUTES: ${PURGE_INTERVAL_MINUTES:-10}
+      DOWNLOADER_URL: http://downloader:5000
+      DOWNLOADER_CONFIG: /config/config.json
+    volumes:
+      - ./dashboard:/app:ro
+      - ./downloader/config.json:/config/config.json:ro
+      - ./downloads:/data/downloads:ro
+      - ./state:/data/state
+    depends_on:
+      - downloader

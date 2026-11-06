@@ -1,0 +1,11 @@
+# Downloaded GRIB files and runtime state (subscriptions, MQTT client id, history).
+# The empty folders are kept, so Docker doesn't create them owned by root.
+downloads/*
+!downloads/.gitkeep
+state/*
+!state/.gitkeep
+
+.claude/
+icons/
+__pycache__/
+.DS_Store
