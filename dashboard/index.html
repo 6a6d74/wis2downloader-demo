@@ -301,6 +301,7 @@ async function refreshConfig() {
     ["Global Broker", `${d.broker_hostname}:${d.broker_port} (${d.broker_protocol})`],
     ["Login", d.broker_username],
     ["Download workers", d.download_workers],
+    ["Path filter", c.data_id_filter ? `${c.data_id_filter} (other notifications are dropped; demo patch)` : "none (every file is downloaded)"],
     ["Download directory", `${d.download_dir}  →  ./downloads on this computer`],
     ["Free-space floor", `${d.min_free_space} GB`],
     ["Topic validation", d.validate_topics ? "on (WIS2 topic hierarchy)" : "off"],

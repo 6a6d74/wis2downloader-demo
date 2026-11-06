@@ -13,6 +13,8 @@ services:
     user: *host-user
     environment:
       HOME: /tmp                # gunicorn keeps its control socket in $HOME
+      # only notifications whose path matches this regex are downloaded (patch_filter.py)
+      WIS2_DATA_ID_FILTER: ${DATA_ID_FILTER-/ifs/0p1/oper/}
     restart: unless-stopped
     ports:
       - "127.0.0.1:5050:5000"   # host 5050: 5000 is often taken
@@ -51,6 +53,7 @@ services:
       RETENTION_HOURS: ${RETENTION_HOURS:-36}
       MAX_DOWNLOAD_GB: ${MAX_DOWNLOAD_GB:-20}
       PURGE_INTERVAL_MINUTES: ${PURGE_INTERVAL_MINUTES:-10}
+      DATA_ID_FILTER: ${DATA_ID_FILTER-/ifs/0p1/oper/}
       DOWNLOADER_URL: http://downloader:5000
       DOWNLOADER_CONFIG: /config/config.json
     volumes:

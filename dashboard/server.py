@@ -241,6 +241,8 @@ class Handler(BaseHTTPRequestHandler):
                     "max_download_gb": float(os.environ.get("MAX_DOWNLOAD_GB", "0") or 0),
                     "interval_minutes": float(os.environ.get("PURGE_INTERVAL_MINUTES", "10")),
                 },
+                # the downloader only queues notifications whose path matches this (patch_filter.py)
+                "data_id_filter": os.environ.get("DATA_ID_FILTER", ""),
             })
         if path == "/files" or path.startswith("/files/"):
             return self.files(urllib.parse.unquote(path[len("/files"):]).lstrip("/"))

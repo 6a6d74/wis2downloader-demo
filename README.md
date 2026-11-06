@@ -1,6 +1,6 @@
 # WIS2 Downloader demo
 
-A self-contained local deployment of the [WIS2 Downloader](https://github.com/World-Meteorological-Organization/wis2downloader). It subscribes to ECMWF's deterministic medium-range forecasts on Météo-France's Global Broker and accumulates the GRIB2 files they announce. A purge deletes files older than 36 hours and keeps the pile under 20 GB.
+A self-contained local deployment of the [WIS2 Downloader](https://github.com/World-Meteorological-Organization/wis2downloader). It subscribes to ECMWF's deterministic medium-range forecasts on Météo-France's Global Broker and accumulates the 0.1° IFS GRIB2 files they announce. A purge deletes files older than 36 hours and keeps the pile under 20 GB.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/wis2downloader-demo-architecture-dark.png">
@@ -15,7 +15,7 @@ ECMWF flags its notifications `"cache": false`. Global Caches therefore republis
 | `purger` | Deletes files downloaded more than `RETENTION_HOURS` ago (36 h by default), every 10 minutes. If the pile still exceeds `MAX_DOWNLOAD_GB` (20 GB), the oldest files go first. wis2downloader 0.3.2 never deletes anything itself. | shown on the dashboard |
 | `dashboard` | Shows the configuration, the subscriptions and the pile: file count, size, a size-over-time chart and the newest files. It also lets you browse and download the files, and **Inspect & plot** any GRIB file. | <http://localhost:8088> |
 
-**What is wis2downloader, and what isn't.** Only the `downloader` container is wis2downloader: the unmodified PyPI package, apart from the small patch described under *Notes*. Its own web interface is the API and Swagger page on port 5050. The dashboard (including Inspect & plot) and the purger were written for this demo and aren't part of wis2downloader, so say so when presenting. The current wis2downloader (1.0 beta) has its own web UI and Grafana dashboards, but no `add-subscription` CLI (see *Notes*).
+**What is wis2downloader, and what isn't.** Only the `downloader` container is wis2downloader: the PyPI package, apart from two small patches applied when the image is built: extra media types, and the path filter (both under *Notes*). Its own web interface is the API and Swagger page on port 5050. The dashboard (including Inspect & plot) and the purger were written for this demo and aren't part of wis2downloader, so say so when presenting. The current wis2downloader (1.0 beta) has its own web UI and Grafana dashboards, but no `add-subscription` CLI (see *Notes*).
 
 ## Run it
 
@@ -39,6 +39,7 @@ Open <http://localhost:8088>.
 
 1. **Show the configuration.** On the dashboard, the *Configuration* card shows:
    - the Global Broker, login and download directory
+   - the path filter: only `/ifs/0p1/oper/` files, the 0.1° IFS forecasts, are downloaded
    - the 36-hour retention and the 20 GB cap
 
    Expand *downloader/config.json* to show the downloader's actual config file. The purge settings are in `.env`.
@@ -73,11 +74,11 @@ Measured on 5–6 November 2026. The topic carries forecasts from two ECMWF mode
 | IFS 0.1° surface | `ifs/0p1/oper` | `-oper-fc-sfc` | ~95 MB | 49 | ~4.6 GB |
 | IFS 0.25° | `ifs/0p25/oper` | `-oper-fc` | ~57–100 MB | 49–85 (3-hourly to 144 h, then 6-hourly to 360 h) | ~5–6 GB |
 | AIFS Single 0.25° | `aifs-single/0p25/oper` | `-oper-fc` | ~55 MB | up to 61 (6-hourly to 360 h) | ~3 GB |
-| Wave, 0.1° and 0.25° | | `-wave-fc-sfc`, `-wave-fc` | 4–27 MB | 49–85 | ~0.3–1.6 GB |
+| Wave, 0.1° and 0.25° | `ifs/…/wave` | `-wave-fc-sfc`, `-wave-fc` | 4–27 MB | 49–85 | ~0.3–1.6 GB |
 
-IFS 0.25° and AIFS files have the same names, and wis2downloader 0.3.2 keeps only one of each pair (see *Notes*), so the AIFS figures are partly estimated.
+These were measured before the path filter, when everything was downloaded. IFS 0.25° and AIFS files have the same names, and 0.3.2 then kept only one of each pair (see *Notes*), so the AIFS figures are partly estimated.
 
-That is about **30 GB per run, or roughly 120 GB a day**.
+That is about **30 GB per run on the topic, or roughly 120 GB a day**. **With the path filter, the demo downloads only the first two rows: about 23 GB per run, roughly 90 GB a day** in about 400 files.
 
 **Ball-park figure for the audience:** over 24 hours this one topic delivers roughly **120 GB of unique GRIB2 data in about 1,200 files**, counting each file once. That's an average of about 1.4 MB/s (11 Mbit/s), arriving in bursts as each run is released. The notifications are several times more numerous: each file was announced about 7 times overnight (once per Global Cache republishing it), roughly 8,000 notifications a day. These figures come from about a day of observation (the 5 November 18z run complete, the 6 November 00z run in progress), so treat them as ±20%. With one download worker, wis2downloader managed about 8 MB/s, about 28 GB an hour. That's plenty over a day, but it falls behind while a run is being published, so files can arrive a few hours after ECMWF releases them.
 
@@ -87,21 +88,22 @@ That is about **30 GB per run, or roughly 120 GB a day**.
 
 **Possible follow-ups,** not needed for the demo:
 1. **More workers without duplicates.** Patch 0.3.2 so a worker skips a file another worker is already downloading, which also closes the race behind the 2.7× duplicates (see *Notes*). Then raise `download_workers`: with 4 workers the overall rate was about 17 MB/s, against about 8 MB/s with 1.
-2. **Fewer products.** 0.3.2 can't filter within a topic, so this is also a patch: skip file names matching a pattern. The 0.1° pressure-level files are about 60% of the volume; keeping only the 0.1° surface files (about 4.6 GB a run) would bring each run in within minutes, at the cost of the upper-air fields.
+2. **Fewer products still.** *Done in part:* the path filter now keeps only 0.1° IFS files (see *Notes*). The 0.1° pressure-level files are about 80% of what's left; `DATA_ID_FILTER=/ifs/0p1/oper/.*-sfc` would keep only the surface files (about 4.6 GB a run, in within minutes), at the cost of the upper-air fields.
 3. **Show the queue on the dashboard,** from the downloader's `/metrics`, so presenters can see when a restart is safe.
 
-So the **20 GB cap, not the 36-hour retention, is what limits the pile**: 20 GB is less than one run, and the purger keeps roughly the latest 4–5 hours of files. Overnight on 5–6 November it removed 75 GB, all because of the cap.
+So the **20 GB cap, not the 36-hour retention, is what limits the pile**: 20 GB is a little less than one filtered run (about 23 GB), so the pile holds most of the latest run. Overnight on 5–6 November it removed 75 GB, all because of the cap.
 
 **20 GB is fine for the demo.** The point is to see GRIB files arriving and to look inside the ones that have arrived, not to keep a complete archive: a few hours of files, a few dozen of each product, is plenty to browse and inspect. Raise `MAX_DOWNLOAD_GB` only if you need more and the disk has room: holding 36 hours would take about 180 GB.
 
-## Change the purge
+## Change the settings
 
-Edit `.env`, then run `docker compose up -d`:
+Edit `.env`, then run `docker compose up -d` (once the queue is empty: see *Restart only when the queue is empty*):
 
 ```
 RETENTION_HOURS=36        # delete files downloaded more than this long ago
 MAX_DOWNLOAD_GB=20        # safety cap: oldest files go first above this; 0 = no cap
 PURGE_INTERVAL_MINUTES=10
+DATA_ID_FILTER=/ifs/0p1/oper/   # download only matching paths (regex); empty = everything
 ```
 
 At ECMWF's volume (see *How much data*), the cap does the work and `RETENTION_HOURS` only matters if you raise the cap a lot or subscribe to a quieter topic. The default 20 GB is enough for the demo.
@@ -118,15 +120,19 @@ rm -rf downloads/* state/*           # forget files, subscriptions and history
 - **Why 0.3.2.** The current wis2downloader (1.0 beta, on GitHub) is a larger stack: Redis, Celery workers, Grafana, Loki, Prometheus and a NiceGUI web UI. It has no `wis2downloader add-subscription` command; subscriptions go through its REST API or UI. Its retention setting is in whole days, so it can't do 36 hours.
 - **File extensions and one patch to 0.3.2.** 0.3.2 names saved files by media type, not by the name in the URL, and calls anything it doesn't recognise `.bin`. ECMWF announces `application/grib;edition=2`, which 0.3.2 already maps to `.grib`, so ECMWF's `.grib2` files are saved as `.grib`. The image adds other GRIB and BUFR media types used on WIS2 (see `downloader/Dockerfile`), which are saved as `.grib2` and `.bufr4`.
 - **One download worker.** `download_workers` is 1 in `downloader/config.json`. Each Global Cache republishes every notification, so each file is announced several times. 0.3.2 skips a file that already exists, but with several workers, two can fetch the same file at once before either has saved it. With 4 workers, ECMWF data was downloaded 2.7 times over; with 1 there were no duplicates (2,926 repeat notifications skipped in 10 hours). The cost is speed: see *How much data*.
-- **IFS 0.25° and AIFS files collide.** Both models' 0.25° files are named `<run>-<step>h-oper-fc.grib2`. Only the path tells them apart (`…/ifs/0p25/oper/…` against `…/aifs-single/0p25/oper/…`), and 0.3.2 saves every file by name alone in one folder per topic. At each step both models share, whichever file arrives first is kept and the other is skipped as "already exists". So a `-oper-fc.grib` file on disk may be from either model: **Inspect & plot** shows `marsClass` `od` for IFS and `ai` for AIFS. A fix is planned: download only the 0.1° IFS files.
-- **What a notification contains.** For example, from 6 November 2026:
-  - `properties.data_id`: `wis2/int-ecmwf/data/core/weather/prediction/forecast/medium-range/deterministic/global/20261106/06z/aifs-single/0p25/oper/20261106060000-48h-oper-fc.grib2`
-  - `properties.metadata_id`: the WIS2 discovery record, here `urn:wmo:md:int-ecmwf:aifs:oper:forecast`. ECMWF's IFS record, `urn:wmo:md:int-ecmwf:ifs:oper:forecast`, describes only 0.25° data.
+- **The path filter (a second patch to 0.3.2).** ECMWF's deterministic topic carries four products: IFS 0.1° (`ifs/0p1/oper`), IFS 0.25° (`ifs/0p25/oper`), waves (`ifs/0p25/wave`) and AIFS Single 0.25° (`aifs-single/0p25/oper`). The demo keeps only the first. `downloader/patch_filter.py`, applied when the image is built, drops every notification whose `properties.data_id` and canonical link both fail to match `DATA_ID_FILTER` (a regular expression in `.env`, default `/ifs/0p1/oper/`) before it reaches the download queue; the log says `Filtered out (not …)`. `DATA_ID_FILTER=` (empty) turns it off; after a change, run `docker compose up -d` once the queue is empty. Tested on 820 real notifications from 6 November: all 186 for `ifs/0p1/oper` were queued, and all 46 AIFS, 294 IFS 0.25° and 294 wave notifications were dropped. Filtering also keeps the queue short: about two thirds of the topic's notifications never enter it.
+- **Why filter on the path.** Nothing else in a notification separates the products reliably:
+  - **Clashing file names.** IFS 0.25° and AIFS files are both named `<run>-<step>h-oper-fc.grib2`; only the path tells them apart. 0.3.2 saves every file by name alone, in one folder per topic, so without the filter, at each step both models share, whichever file arrived first was kept and the other skipped as "already exists". A `-oper-fc.grib` on disk could be from either model (**Inspect & plot** shows `marsClass` `od` for IFS, `ai` for AIFS). The 0.1° files have names of their own (`-oper-fc-pl`, `-oper-fc-sfc`), so with the filter nothing clashes.
+  - **A shared `metadata_id`.** 0.1° IFS, 0.25° IFS and wave notifications all carry the same discovery-record id. For the 6 November 06z run it was `urn:wmo:md:int-ecmwf:ifs:oper:short-forecast`. 00z and 12z probably use `urn:wmo:md:int-ecmwf:ifs:oper:forecast` instead; that hasn't been confirmed. ECMWF's IFS records describe only 0.25° data, so a 0.1° file's `metadata_id` leads to a description of a different resolution. Only AIFS has its own (`urn:wmo:md:int-ecmwf:aifs:oper:forecast`).
+  - **Same media type, same topic:** `application/grib;edition=2` for all of them.
+- **What a notification contains.** For example, a 0.1° file from 6 November 2026:
+  - `properties.data_id`: `wis2/int-ecmwf/data/core/weather/prediction/forecast/medium-range/deterministic/global/20261106/06z/ifs/0p1/oper/20261106060000-0h-oper-fc-sfc.grib2`
+  - `properties.metadata_id`: the WIS2 discovery record, `urn:wmo:md:int-ecmwf:ifs:oper:short-forecast` (see *Why filter on the path*)
   - `properties.cache`: `false`
-  - the `canonical` link: `https://data.ecmwf.int/forecasts/20261106/06z/aifs-single/0p25/oper/20261106060000-48h-oper-fc.grib2`, with its `length` in bytes
+  - the `canonical` link: `https://data.ecmwf.int/forecasts/20261106/06z/ifs/0p1/oper/20261106060000-0h-oper-fc-sfc.grib2`, with its `length` in bytes (78,975,294)
   - an `alternate` link to the same file on Azure (`ai4edataeuwest.blob.core.windows.net/ecmwf/…`), which wis2downloader doesn't use.
 
-  Each file was announced about 6–7 times, once per Global Cache republishing it, but only some copies carry a `global-cache` property naming the cache.
+  Each file was announced about 5–7 times, once per Global Cache republishing it, but only some copies carry a `global-cache` property naming the cache.
 - **Duplicates under different names.** 0.3.2 skips a file only if one with the same name already exists that day. If two Global Caches name the same file differently, it's saved twice. This was seen with NOAA test data, not ECMWF.
 - **Inspect & plot.** These are dashboard features, not part of wis2downloader.
   - **Scripts:** the dashboard runs copies of `grib_inspect.py` and `grib_plot.py` from grib-utils, unchanged, in `dashboard/grib_utils/`. They were copied on 6 November 2026, after two fixes to `grib_plot.py` in grib-utils: fields stored in kelvin are shown in °C with earthkit's own temperature colours (before, only `t` was), and titles name the level only where it adds something (`2 metre temperature`, not `… at heightAboveGround 2`). If grib-utils changes, copy the scripts again.

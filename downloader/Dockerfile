@@ -11,6 +11,12 @@ RUN f=$(python -c "import wis2downloader.downloader as d; print(d.__file__)") &&
     python -c "from wis2downloader.downloader import map_media_type as m; \
 assert m('application/grib') == 'grib2' and m('application/bufr') == 'bufr4'"
 
+# Only queue notifications whose data_id / canonical href matches WIS2_DATA_ID_FILTER
+# (DATA_ID_FILTER in .env; default ifs/0p1/oper): see patch_filter.py.
+COPY patch_filter.py /tmp/patch_filter.py
+RUN python /tmp/patch_filter.py && rm /tmp/patch_filter.py && \
+    python -c "import wis2downloader.subscriber"
+
 WORKDIR /app
 ENV WIS2DOWNLOADER_CONFIG=/app/config.json \
     PYTHONUNBUFFERED=1
