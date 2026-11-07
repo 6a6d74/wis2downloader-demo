@@ -274,6 +274,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(500, {"error": str(e)})
 
     def files(self, rel):
+        if any(part.startswith(".") for part in Path(rel).parts):  # hidden files aren't downloads
+            return self.send(404, "<p>Not found.</p>", "text/html")
         target = in_downloads(rel)
         if target is None:
             return self.send(403, {"error": "outside the download directory"})
@@ -291,7 +293,9 @@ class Handler(BaseHTTPRequestHandler):
         if not target.is_dir():
             return self.send(404, "<p>Not found (it may have been purged).</p>", "text/html")
         rows = []
-        entries = sorted(target.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+        # hidden files and folders (downloads/.gitkeep) aren't downloads: don't list them
+        entries = sorted((p for p in target.iterdir() if not p.name.startswith(".")),
+                         key=lambda p: (not p.is_dir(), p.name))
         for p in entries:
             try:
                 st = p.stat()
@@ -299,7 +303,7 @@ class Handler(BaseHTTPRequestHandler):
                 continue
             href = "/files/" + urllib.parse.quote(str(p.relative_to(DATA)))
             if p.is_dir():
-                count = sum(len(f) for _, _, f in os.walk(p))
+                count = sum(1 for _, _, f in os.walk(p) for n in f if not n.startswith("."))
                 info = f"{count} file(s)"
             else:
                 info = human(st.st_size)
