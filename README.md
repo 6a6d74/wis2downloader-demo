@@ -66,21 +66,21 @@ ECMWF publishes on this topic only when a forecast run is released, in bursts a 
 
 ## How much data
 
-Measured on 5–6 November 2026. The topic carries forecasts from two ECMWF models, IFS (physics-based) and AIFS (ECMWF's AI model), from each of the four daily runs (00z, 06z, 12z, 18z):
+Measured on 5–7 November 2026. The topic carries forecasts from two ECMWF models, IFS (physics-based) and AIFS (ECMWF's AI model), from each of the four daily runs (00z, 06z, 12z, 18z). The 00z and 12z runs go further ahead than 06z and 18z, so they are bigger:
 
 | Product | Path in the URL | File name ends | Size per file | Files per run | Per run |
 |---|---|---|---|---|---|
-| IFS 0.1° pressure levels | `ifs/0p1/oper` | `-oper-fc-pl` | ~370 MB | 49 (0–144 h, 3-hourly) | ~18 GB |
-| IFS 0.1° surface | `ifs/0p1/oper` | `-oper-fc-sfc` | ~95 MB | 49 | ~4.6 GB |
+| IFS 0.1° pressure levels | `ifs/0p1/oper` | `-oper-fc-pl` | ~370 MB | 85 at 00z/12z (to 360 h); 49 at 06z/18z (to 144 h) | 31.7 GB / 18.0 GB |
+| IFS 0.1° surface | `ifs/0p1/oper` | `-oper-fc-sfc` | ~95 MB | 85 / 49 | 8.1 GB / 4.6 GB |
 | IFS 0.25° | `ifs/0p25/oper` | `-oper-fc` | ~57–100 MB | 49–85 (3-hourly to 144 h, then 6-hourly to 360 h) | ~5–6 GB |
 | AIFS Single 0.25° | `aifs-single/0p25/oper` | `-oper-fc` | ~55 MB | up to 61 (6-hourly to 360 h) | ~3 GB |
 | Wave, 0.1° and 0.25° | `ifs/…/wave` | `-wave-fc-sfc`, `-wave-fc` | 4–27 MB | 49–85 | ~0.3–1.6 GB |
 
-These were measured before the path filter, when everything was downloaded. IFS 0.25° and AIFS files have the same names, and 0.3.2 then kept only one of each pair (see *Notes*), so the AIFS figures are partly estimated.
+The 0.1° figures were measured with the path filter on 6–7 November (12z: 170 files, 39.7 GB; 18z: 98 files, 22.6 GB). Lead times are 3-hourly to 144 h, then 6-hourly. The other rows were measured before the filter, when everything was downloaded; IFS 0.25° and AIFS files have the same names, and 0.3.2 then kept only one of each pair (see *Notes*), so the AIFS figures are partly estimated.
 
-That is about **30 GB per run on the topic, or roughly 120 GB a day**. **With the path filter, the demo downloads only the first two rows: about 23 GB per run, roughly 90 GB a day** in about 400 files.
+**With the path filter, the demo downloads only the first two rows: about 40 GB for a 00z or 12z run and 23 GB for a 06z or 18z run, roughly 125 GB a day in about 540 files.** The whole topic is about 165 GB a day.
 
-**Ball-park figure for the audience:** over 24 hours this one topic delivers roughly **120 GB of unique GRIB2 data in about 1,200 files**, counting each file once. That's an average of about 1.4 MB/s (11 Mbit/s), arriving in bursts as each run is released. The notifications are several times more numerous: each file was announced about 7 times overnight (once per Global Cache republishing it), roughly 8,000 notifications a day. These figures come from about a day of observation (the 5 November 18z run complete, the 6 November 00z run in progress), so treat them as ±20%. With one download worker, wis2downloader managed about 8 MB/s, about 28 GB an hour. That's plenty over a day, but it falls behind while a run is being published, so files can arrive a few hours after ECMWF releases them.
+**Ball-park figure for the audience:** over 24 hours this one topic delivers roughly **165 GB of unique GRIB2 data in about 1,600 files**, counting each file once: about 125 GB of 0.1° IFS, 22 GB of 0.25° IFS, 12 GB of AIFS and 8 GB of waves. That's an average of about 1.9 MB/s (15 Mbit/s), arriving in bursts as each run is released. The notifications are several times more numerous: each file was announced about 7 times (once per Global Cache republishing it), roughly 11,000 notifications a day. The 0.1° figures are measured; the rest come from about a day of observation before the filter, so treat the total as ±20%. (An earlier estimate here, 120 GB a day, was too low: it assumed every 0.1° run stops at 144 h.) With one download worker, wis2downloader managed about 8 MB/s, about 28 GB an hour. That's plenty over a day, but it falls behind while a run is being published, so files can arrive a few hours after ECMWF releases them.
 
 **Backlog.** While a run is being published, notifications arrive faster than one worker can download, so they queue in the downloader's memory. On 6 November the queue reached about 950 notifications at 10:10Z, roughly three quarters of them repeats that are skipped instantly, and was empty about an hour later, well before the next run. Files therefore land up to a few hours after ECMWF releases them. That doesn't matter for this demo. The queue length is `queue_size` on <http://localhost:5050/metrics>.
 
@@ -88,12 +88,12 @@ That is about **30 GB per run on the topic, or roughly 120 GB a day**. **With th
 
 **Possible follow-ups,** not needed for the demo:
 1. **More workers without duplicates.** Patch 0.3.2 so a worker skips a file another worker is already downloading, which also closes the race behind the 2.7× duplicates (see *Notes*). Then raise `download_workers`: with 4 workers the overall rate was about 17 MB/s, against about 8 MB/s with 1.
-2. **Fewer products still.** *Done in part:* the path filter now keeps only 0.1° IFS files (see *Notes*). The 0.1° pressure-level files are about 80% of what's left; `DATA_ID_FILTER=/ifs/0p1/oper/.*-sfc` would keep only the surface files (about 4.6 GB a run, in within minutes), at the cost of the upper-air fields.
+2. **Fewer products still.** *Done in part:* the path filter now keeps only 0.1° IFS files (see *Notes*). The 0.1° pressure-level files are about 80% of what's left; `DATA_ID_FILTER=/ifs/0p1/oper/.*-sfc` would keep only the surface files (4.6 GB for a 06z/18z run, 8.1 GB for 00z/12z, in within minutes), at the cost of the upper-air fields.
 3. **Show the queue on the dashboard,** from the downloader's `/metrics`, so presenters can see when a restart is safe.
 
-So the **20 GB cap, not the 36-hour retention, is what limits the pile**: 20 GB is a little less than one filtered run (about 23 GB), so the pile holds most of the latest run. Overnight on 5–6 November it removed 75 GB, all because of the cap.
+So the **20 GB cap, not the 36-hour retention, is what limits the pile**: 20 GB holds about half of a 00z or 12z run (about 40 GB) or most of a 06z or 18z run (about 23 GB), so the pile is roughly the latest 10–12 hours of files. Overnight on 5–6 November it removed 75 GB, all because of the cap.
 
-**20 GB is fine for the demo.** The point is to see GRIB files arriving and to look inside the ones that have arrived, not to keep a complete archive: a few hours of files, a few dozen of each product, is plenty to browse and inspect. Raise `MAX_DOWNLOAD_GB` only if you need more and the disk has room: holding 36 hours would take about 180 GB.
+**20 GB is fine for the demo.** The point is to see GRIB files arriving and to look inside the ones that have arrived, not to keep a complete archive: a few hours of files, a few dozen of each product, is plenty to browse and inspect. Raise `MAX_DOWNLOAD_GB` only if you need more and the disk has room: holding 36 hours of filtered files would take about 190 GB.
 
 ## Change the settings
 
